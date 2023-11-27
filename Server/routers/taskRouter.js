@@ -1,12 +1,15 @@
 const express = require("express");
 const taskController = require("../controllers/taskController");
 const router = express.Router();
+const authorize= require('../middlewares/authorization')
 
-router.post("/addTask/:admin_id",taskController.addTask);
-router.put("/UpdateTask/:task_id",taskController.UpdateTask);
-router.delete("/SoftdeleteTask/:task_id",taskController.SoftdeleteTask);
-router.put("/RestoreTask/:task_id",taskController.RestoreTask);
+router.post("/addTask",authorize.authorize,taskController.addTask);
+router.put("/UpdateTask/:task_id",authorize.authorize,taskController.UpdateTask);
+router.delete("/SoftdeleteTask/:task_id",authorize.authorize,taskController.SoftdeleteTask);
+router.put("/RestoreTask/:task_id",authorize.authorize,taskController.RestoreTask);
 router.get("/GetTaskes",taskController.GetTaskes);
+
+
 //  router.post("/addTasktoUser/:admin_id/:user_id/:task_id ",taskController.addTasktoUser );
 
 // router.put("/UpdateCourse/:course_id",coursesController.UpdateCourse);

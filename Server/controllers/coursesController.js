@@ -3,11 +3,16 @@ const CourseModel = require('../models/courseModel');
 
 
 async function addCourse(req, res) {
-  const admin_id = req.params.admin_id;
+  console.log(111111111111111111111111);
+  console.log(req.user.user_id);
+  // const admin_id = req.params.Teacher_id;
   const { course_name, course_description, start_date } = req.body;
+  // const admin_id = req.user.user_id;
+
 
   try {
-    const newCourseId = await CourseModel.addCourse(admin_id, course_name, course_description, start_date);
+    const usid = req.user.user_id;
+    const newCourseId = await CourseModel.addCourse( course_name, course_description, start_date, usid);
 
     res.status(201).json({ message: "Course added successfully", course_id: newCourseId });
   } catch (error) {
@@ -16,14 +21,16 @@ async function addCourse(req, res) {
   }
 }
 
-//____________________________________________________________________________________
+//________________________________________________________________________________________________________________
+
 
   async function UpdateCourse(req, res) {
     const course_id = req.params.course_id;
     const { course_name, course_description, start_date } = req.body;
-  
+    const usid = req.user.user_id;
+
     try {
-      await CourseModel.UpdateCourse(course_id, course_name, course_description, start_date);
+      await CourseModel.UpdateCourse(course_id, course_name, course_description, start_date,usid);
   
       res.status(200).json({ message: "Course updated successfully" });
     } catch (error) {
@@ -36,9 +43,10 @@ async function addCourse(req, res) {
 
   async function SoftdeleteCourse(req, res) {
     const course_id = req.params.course_id;
-  
+    const usid = req.user.user_id;
+
     try {
-      await CourseModel.SoftdeleteCourse(course_id);
+      await CourseModel.SoftdeleteCourse(course_id,usid);
   
       res.status(200).json({ message: "Course deleted successfully" });
     } catch (error) {

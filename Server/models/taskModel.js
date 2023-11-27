@@ -1,7 +1,7 @@
 const db = require("../models/db");
 
 
-const addTask = async (admin_id,task_name, task_description, task_url) => {
+const addTask = async (task_name, task_description, task_url,admin_id) => {
     const queryText = `
       INSERT INTO task (admin_id,task_name, task_description, task_url)
       VALUES ($1, $2, $3, $4 )
@@ -21,17 +21,17 @@ const addTask = async (admin_id,task_name, task_description, task_url) => {
 
   //____________________________________________________________________________
 
-  const UpdateTask = async (task_id,task_name, task_description, task_url) => {
+  const UpdateTask = async (task_id,task_name, task_description, task_url,admin_id) => {
     const queryText = `
       UPDATE task
       SET task_name = $1, task_description = $2, task_url = $3 
-      WHERE task_id = $4;
+      WHERE task_id = $4 AND admin_id= $5 ;
     `;
+
+    const values = [task_name, task_description, task_url, task_id,admin_id];
   
-    const values = [task_name, task_description, task_url, task_id];
-  
-    try {
-      await db.query(queryText, values);
+    try {  
+      await db.query(queryText, values); 
     } catch (error) {
       console.error("Failed to update task in the model: ", error);
       throw new Error("Failed to update task in the model");
@@ -40,14 +40,14 @@ const addTask = async (admin_id,task_name, task_description, task_url) => {
 
 //__________________________________________________________________________________
 
-const SoftdeleteTask = async (task_id) => {
+const SoftdeleteTask = async (task_id,admin_id) => {
     const queryText = `
       UPDATE task
       SET deleted = TRUE
-      WHERE task_id = $1;
+      WHERE task_id = $1 AND admin_id=$2;
     `;
   
-    const values = [task_id];
+    const values = [task_id,admin_id];
   
     try {
       await db.query(queryText, values);
@@ -59,14 +59,14 @@ const SoftdeleteTask = async (task_id) => {
 
 //_________________________________________________________________________________________
 
-const RestoreTask = async (task_id) => {
+const RestoreTask = async (task_id,admin_id) => {
     const queryText = `
       UPDATE task
       SET deleted = FALSE
-      WHERE task_id = $1;
+      WHERE task_id = $1 AND admin_id=$2;
     `;
   
-    const values = [task_id];
+    const values = [task_id,admin_id];
   
     try {
       await db.query(queryText, values);

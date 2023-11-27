@@ -4,18 +4,20 @@ const TaskModel = require('../models/taskModel');
 
 
 async function addTask(req, res) {
-    const admin_id = req.params.admin_id;
+    // const admin_id = req.params.admin_id;
     const { task_name, task_description, task_url } = req.body;
   
     try {
-      const newTaskId = await TaskModel.addTask(admin_id, task_name, task_description, task_url);
+      const usid = req.user.user_id;
+
+      const newTaskId = await TaskModel.addTask(task_name, task_description, task_url,usid);
   
       res.status(201).json({ message: "Task added successfully", task_id: newTaskId });
     } catch (error) {
       console.error("Failed to add Task in the controller: ", error);
       res.status(500).json({ error: "Failed to add Task" });
     }
-  }
+  } 
 
 //____________________________________________________________________________________________________
 
@@ -24,7 +26,10 @@ async function addTask(req, res) {
     const {task_name, task_description, task_url } = req.body;
   
     try {
-      await TaskModel.UpdateTask(task_id, task_name, task_description, task_url);
+      const usid = req.user.user_id;
+      
+
+      await TaskModel.UpdateTask(task_id, task_name, task_description, task_url,usid);
   
       res.status(200).json({ message: "Task updated successfully" });
     } catch (error) {
@@ -37,9 +42,10 @@ async function addTask(req, res) {
 
   async function SoftdeleteTask(req, res) {
     const task_id = req.params.task_id;
-  
+    const usid = req.user.user_id;
+
     try {
-      await TaskModel.SoftdeleteTask(task_id);
+      await TaskModel.SoftdeleteTask(task_id,usid);
   
       res.status(200).json({ message: "Task deleted successfully" });
     } catch (error) {
@@ -52,9 +58,10 @@ async function addTask(req, res) {
 
   async function RestoreTask(req, res) {
     const task_id = req.params.task_id;
-  
+    const usid = req.user.user_id;
+
     try {
-      await TaskModel.RestoreTask(task_id);
+      await TaskModel.RestoreTask(task_id,usid);
   
       res.status(200).json({ message: "Task restored successfully" });
     } catch (error) {

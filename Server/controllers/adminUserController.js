@@ -1,25 +1,107 @@
 const db = require("../models/db");
+const joi = require("joi");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
+const adminUserModel = require('../models/adminUserModel');
 
-const adminCreate = (req, res) => {
+const subadminCreate = async (req, res) => {
     const { first_name, last_name, email, password, role } = req.body;
   
-    db.query(
-      'INSERT INTO admin (first_name, last_name, email, password, role) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [first_name, last_name, email, password, role],
-      (error, results) => {
-        if (error) {
-          console.error('Error creating admin:', error);
-          return res.status(500).json({ message: 'Internal server error' });
-        }
-        return res.status(201).json(results.rows[0] );
-      }
-    );
-  };
+    try {
+      // Check if email is already taken
+      const existingUser = await adminUserModel.findByEmail(email);
   
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+  
+      const schema = joi.object({
+                first_name: joi.string().alphanum().min(3).max(20).required(),
+                last_name: joi.string().alphanum().min(3).max(20).required(),
+              email: joi
+                .string()
+                .email({ minDomainSegments: 2, tlds: { allow: ["com", "net"] } })
+                .required(),
+              password: joi    
+                .string()
+                .pattern(
+                  new RegExp(
+                    "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d@$!%*?&^#]{6,30}$"
+                  )
+                ).required(),
+                
+            });
+            const validate = schema.validate({                 
+                first_name,
+                last_name,
+              email,
+              password,
+            });
+            if (validate.error) {
+              res.status(405).json({ error: validate.error.details });
+            }
+            else{
+              const hashedPassword = await bcrypt.hash(password, 10);
+              const newUser = await adminUserModel.createSubadmin( first_name,last_name,email,hashedPassword,role );
+              res.status(201).json({ message: 'Subadmin registered successfully', SubAdmin: newUser });
+            }
+           }
+           catch (error) {
+              console.error('Error registering Subadmin:', error);
+              res.status(500).json({ message: 'Internal server error' });
+            }
+          };
 
   //_________________________________________________________________________
 
+
+
+  const loginAdmin = async (req, res) => {
+    const { email, password } = req.body;
+  
+    try {
+      
+      //  const hashedPassword = await bcrypt.hash(password, 10);
+  
+      const user = await adminUserModel.checkEmail(email);
+  
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid email' });
+      }
+     const storedHashedPassword = user.password;
+      const passwordMatch = await bcrypt.compare(password, storedHashedPassword);
+      if (!passwordMatch) {
+        res.status(400).json({ message: "Email or password is invalid" });
+        return;
+    }
+    console.log(user.admin_id);
+      // Include user information in the token payload
+      const payload = {
+         user_id: user.admin_id,
+        email: user.email,
+        role:user.role
+      };
+      
+  
+      const secretKey = process.env.SECRET_KEY;
+      const token = jwt.sign(payload, secretKey, { expiresIn: '7d' });
+      res.cookie("accessToken", token, { httpOnly: true });
+
+      res.status(200).json({
+        message: 'Admin signed in successfully',
+        token: token,
+        Admin_id: user.admin_id,
+      });
+      console.log(token);
+      console.log(`Admin_id : ${user.admin_id}`);
+    } catch (error) {
+      console.error('Error logging in:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+
+  //______________________________________________________________________
 
 const SoftdeleteUser = async (req, res) => {
     const user_id = req.params.id;
@@ -116,17 +198,19 @@ async function GetUsers (req, res) {
 
   async function addCoursetoUser(req, res) {
     try {
-      const admin_id = req.params.admin_id;
+      // const admin_id = req.params.admin_id;
+      const usid = req.user.user_id;
+
       const user_id = req.params.user_id;
       const course_id = req.params.course_id;
       const { notes } = req.body;
   
-      const checkUserCourse = await db.query('SELECT * FROM courses_user WHERE user_id = $1 AND course_id = $2', [user_id, course_id]);
+      const checkUserCourse = await db.query('SELECT * FROM courses_user WHERE user_id = $1 AND course_id = $2 AND admin_id=$3', [user_id, course_id,usid]);
   
       if (checkUserCourse.rows.length > 0) {
         res.status(400).json({ message: 'The user is already in this course' });
       } else {
-        const result = await db.query('INSERT INTO courses_user(course_id, user_id, admin_id, notes) VALUES($1, $2, $3, $4) RETURNING course_user_id', [course_id, user_id, admin_id, notes]);
+        const result = await db.query('INSERT INTO courses_user(course_id, user_id, admin_id, notes) VALUES($1, $2, $3, $4) RETURNING course_user_id', [course_id, user_id, usid, notes]);
         const addedCourseId = result.rows[0].course_user_id;
         res.status(200).json({ message: 'The course has been added to the user successfully', addedCourseId });
       }
@@ -206,36 +290,141 @@ async function GetUsers (req, res) {
     }
   }
 
-//__________________________________________________________________________
+//_________________________________________________________________________________________
 
 
 async function addTasktoUser(req, res) {
   try {
+    console.log("sdfghjkl;'")
+    const admin_id = req.params.admin_id;
     const user_id = req.params.user_id;
     const task_id = req.params.task_id;
-    const admin_id = req.params.admin_id; // قد يحتاج هذا إلى توفيره في الطلب أو قراءته من الجلسة أو أي مكان آخر تعتمد عليه
+    
 
-    const { start_date, end_date, notes } = req.body;
+    const {  start_date, end_date,notes } = req.body;
 
-    const result = await db.query(`
-      INSERT INTO users_task(user_id, task_id, admin_id, start_date, end_date, notes)
-      VALUES($1, $2, $3, $4, $5, $6)
-      RETURNING users_task_id
-    `, [user_id, task_id, admin_id, start_date, end_date, notes]);
+    const result = await db.query('INSERT INTO users_task(user_id, task_id, start_date, end_date, admin_id, notes) VALUES($1, $2, $3, $4, $5, $6) RETURNING users_task_id',
+     [user_id, task_id, start_date, end_date, admin_id, notes]);
 
     const addedTaskId = result.rows[0].users_task_id;
-    res.status(200).json({ message: 'تمت إضافة المهمة للمستخدم بنجاح', addedTaskId });
+    res.status(200).json({ message: 'The task has been added to the user successfully', addedTaskId });
   } catch (error) {
-    console.error('حدث خطأ أثناء إضافة المهمة للمستخدم:', error);
-    res.status(500).json({ error: 'حدث خطأ أثناء إضافة المهمة للمستخدم' });
+    console.error('An error occurred while adding the task for the user', error);
+    res.status(500).json({ error: 'An error occurred while adding the task for the user' });
   }
 }
+
+//____________________________________________________________________________________________
+
+async function updateTaskForUser(req, res) {
+  try {
+    const users_task_id = req.params.users_task_id;
+    const { start_date, end_date, notes } = req.body;
+
+    await db.query('UPDATE users_task SET start_date = $1, end_date = $2, notes = $3 WHERE users_task_id = $4',
+      [start_date, end_date, notes, users_task_id]);
+      res.status(200).json({ message: 'updated successfully' });
+    } catch (error) {
+      console.error('An error occurred while updating', error);
+      res.status(500).json({ error: 'An error occurred while updating' });
+    }
+  }
+
+
+  //________________________________________________________________________________________________
+
+  async function deleteTaskForUser(req, res) {
+    try {
+      const users_task_id = req.params.users_task_id;
+  
+      await db.query('UPDATE users_task SET deleted =TRUE WHERE users_task_id = $1', [users_task_id]);
+      res.status(200).json({ message: 'Deleted successfully' });
+    } catch (error) {
+      console.error('An error occurred while deleting', error);
+      res.status(500).json({ error: 'An error occurred while deleting' });
+    }
+  } 
+
+  //________________________________________________________________________________________________
+
+  async function restoreTaskForUser(req, res) {
+    try {
+      const users_task_id = req.params.users_task_id;
+  
+      await db.query('UPDATE users_task SET deleted = FALSE WHERE users_task_id = $1', [users_task_id]);
+  
+      res.status(200).json({ message: 'Restored successfully' });
+    } catch (error) {
+      console.error('An error occurred while restoring', error);
+      res.status(500).json({ error: 'An error occurred while restoring' });
+    }
+  }
+
+  //________________________________________________________________________________________________
+
+
+  // async function getTaskDetails(req, res) {
+  //   try {
+  //     const users_task_id = req.params.users_task_id;
+  
+  //     // استرجاع السجل من جدول users_task مع بيانات من جدولي users و task
+  //     const result = await db.query(`
+  //       SELECT users.first_name, task.task_description, task.task_url, users_task.start_date, users_task.end_date
+  //       FROM users_task 
+  //       JOIN users  ON users_task.user_id = users.user_id
+  //       JOIN task  ON users_task.task_id = task.task_id
+  //       WHERE users_task.users_task_id = $1
+  //     `, [users_task_id]);
+  
+  //     const taskDetails = result.rows[0];
+  
+  //     res.status(200).json({ taskDetails });
+  //   } catch (error) {
+  //     console.error('حدث خطأ أثناء استرجاع تفاصيل المهمة:', error);
+  //     res.status(500).json({ error: 'حدث خطأ أثناء استرجاع تفاصيل المهمة' });
+  //   }
+  // }
+  
+
+
+
+
+
+
+
+
+  async function getTaskDetails(req, res) {
+    try {
+      const users_task_id = req.params.users_task_id;
+  
+      const result = await db.query(`
+        SELECT users.first_name, task.task_description, task.task_url, 
+               users_task.start_date, users_task.end_date, 
+               users_task.submit_date, users_task.answer_url
+        FROM users_task 
+        JOIN users ON users_task.user_id = users.user_id
+        JOIN task ON users_task.task_id = task.task_id
+        WHERE users_task.users_task_id = $1
+      `, [users_task_id]);
+  
+      const taskDetails = result.rows[0];
+  
+      res.status(200).json({ taskDetails });
+    } catch (error) {
+      console.error('An error occurred while retrieving task details', error);
+      res.status(500).json({ error: 'An error occurred while retrieving task details' });
+    }
+  }
+  
+
+
 
 
 
 
   module.exports = {
-    adminCreate,
+    subadminCreate,
+    loginAdmin,
 
     SoftdeleteUser,
     RestoreUser,
@@ -255,5 +444,9 @@ async function addTasktoUser(req, res) {
 
 
     addTasktoUser,
+    updateTaskForUser,
+    deleteTaskForUser,
+    restoreTaskForUser,
+    getTaskDetails
   };
   
